@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         开放大学自动刷视频课
 // @namespace    https://www.asymt.com/
-// @version      0.2
+// @version      0.4
 // @description  可以自动刷开放大学的视频课
 // @author       喻名堂
 // @supportURL        https://github.com/asymt/Tampermonkey_Script
@@ -9,7 +9,7 @@
 // @downloadURL       https://raw.githubusercontent.com/asymt/Tampermonkey_Script/main/开放大学自动刷视频课.user.js
 // @match        *://lms.ouchn.cn/course/*
 // @connect           lms.ouchn.cn
-// @run-at            document-start
+// @run-at            document-idle
 // @grant             GM_xmlhttpRequest
 // @grant             GM_setClipboard
 // @grant             GM_setValue
@@ -103,27 +103,37 @@
     console.log('检测到开放大学视频课学习界面！');
     const baseURL=location.protocol+"//"+location.host
         ,coursePath=location.pathname.replace(/^(\/course\/\d+).*/,'$1')
-        ,courseApiURL=baseURL+"/api"+coursePath
+        ,courseApiPath=baseURL+"/api"+coursePath
         ,activitiesReadApiURL=baseURL+"/api/course/activities-read"
         ,courseLearningPath=coursePath+"/learning-activity/full-screen";
-    let modules=[],activities=[],activeModuleIndex=-1,activeActivityIndex=-1;
+    let modules=[],activities=[],allActivityReads={},activeModuleIndex=-1,activeActivityIndex=-1;
     const getModules = async ()=>{
-        const data=await base.get(courseApiURL.replace('course','courses')+"/modules")||{};
+        const data=await base.get(courseApiPath.replace('course','courses')+"/modules")||{};
         return data.modules;
     }
 
     const getAllActivities= async moduleId=>{
-        const data=await base.get(courseApiURL+"/all-activities?module_ids=["+moduleId+"]&activity_types=learning_activities,exams,classrooms")||{};
+        const data=await base.get(courseApiPath+"/all-activities?module_ids=["+moduleId+"]&activity_types=learning_activities,exams,classrooms")||{};
         return data.learning_activities
     }
     const getActivityRead = async activityId=>{
         return await base.post(activitiesReadApiURL+"/"+activityId);
     }
+    //activity-reads-for-user
+    const getAllActivityReads = async ()=>{
+        const data=await base.get(courseApiPath+"/activity-reads-for-user")||{};
+        allActivityReads=(data.activity_reads||[]).reduce((map,activityRead)=>{
+            map[activityRead.activity_id]=activityRead;
+            return map;
+        },{})
+    }
 
     const startNextModule = async ()=>{
         if(modules.length===0){
             modules= await getModules();
-            console.log(modules)
+        }
+        if(Object.keys(allActivityReads).length===0){
+            await getAllActivityReads();
         }
         if(++activeModuleIndex<modules.length) {
             activities =await getAllActivities(modules[activeModuleIndex].id);
@@ -134,20 +144,19 @@
 
     const learningNext = async ()=>{
         if(++activeActivityIndex<activities.length){
+            //todo 待添加自动完成章节测验代码，用于解锁下一章节的视频课
             const activity=activities[activeActivityIndex];
             if(activity.type!=='online_video'){
                 learningNext();
                 return
             }
-            const activityRead= await getActivityRead(activity.id)
-            if(activityRead.completeness==='full'){
+            const activityRead= allActivityReads[activity.id]
+            if(activityRead&&activityRead.completeness==='full'&&activityRead.data&&activityRead.data.completeness===100){
                 learningNext();
                 return;
             }
             const uploads=activity.uploads;
-            console.log("uploads:")
-            console.log(uploads)
-            if(uploads===null||uploads.length===0){
+            if(uploads===undefined||uploads===null||uploads.length===0){
                 learningNext();
                 return;
             }
@@ -162,26 +171,25 @@
                 },arr);
                 return arr;
             },videoIds)
-            console.log("videoIds:")
-            console.log(videoIds)
             if(videoIds.length===0){
                 learningNext();
                 return;
             }
+            location.replace(baseURL+courseLearningPath+"#/"+activity.id)
             setTimeout(()=>{
-                location.replace(baseURL+courseLearningPath+"#/"+activityRead.activity_id)
-                playVideo(videoIds)
+                playVideo(activity.id,videoIds)
             },1000)
         }else {
             startNextModule();
         }
     }
 
-    const playVideo = videoIds=>{
+    const playVideo = async (activityId,videoIds)=>{
+
         const videoElements=document.querySelectorAll('video');
         if(videoElements.length===0){
             setTimeout(()=>{
-                playVideo(videoIds);
+                playVideo(activityId,videoIds);
             },1000)
             return;
         }
@@ -194,13 +202,15 @@
         });
         if(!video){
             setTimeout(()=>{
-                playVideo(videoIds);
+                playVideo(activityId,videoIds);
             },1000)
             return;
         }
         video.muted="muted";
-        video.onended=()=>{
+        video.onended=async ()=>{
             console.log("onended is trigger!")
+            const activityRead=await getActivityRead(activityId);
+            allActivityReads[activityId]=activityRead;
             setTimeout(learningNext,1000);
         }
         video.onpause=()=>{
@@ -232,15 +242,5 @@
         }
     }
     main.init();
-    if (window.onurlchange === null) {
-        // feature is supported
-        window.addEventListener('urlchange', (info) => {
-            console.log('urlchanged');
-            const Reg=new RegExp('^'+courseLearningPath+'$')
-            if(Reg.test(location.pathname)&&/^#\/\d+$/.test(location.hash)){
-                setTimeout(clickPlayButton,500);
-            }
-        });
-    }
     // Your code here...
 })();
