@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         开放大学自动刷视频课
 // @namespace    https://www.asymt.com/
-// @version      0.1
+// @version      0.2
 // @description  可以自动刷开放大学的视频课
 // @author       喻名堂
 // @supportURL        https://github.com/asymt/Tampermonkey_Script
@@ -9,7 +9,7 @@
 // @downloadURL       https://raw.githubusercontent.com/asymt/Tampermonkey_Script/main/开放大学自动刷视频课.user.js
 // @match        *://lms.ouchn.cn/course/*
 // @connect           lms.ouchn.cn
-// @run-at            document-idle
+// @run-at            document-start
 // @grant             GM_xmlhttpRequest
 // @grant             GM_setClipboard
 // @grant             GM_setValue
@@ -168,8 +168,8 @@
                 learningNext();
                 return;
             }
-            location.replace(baseURL+courseLearningPath+"#/"+activityRead.activity_id)
             setTimeout(()=>{
+                location.replace(baseURL+courseLearningPath+"#/"+activityRead.activity_id)
                 playVideo(videoIds)
             },1000)
         }else {
@@ -204,6 +204,7 @@
             setTimeout(learningNext,1000);
         }
         video.onpause=()=>{
+            console.log("onpause is trigger!")
             clickPlayButton();
         }
         video.oncanplay=()=>{
@@ -212,6 +213,8 @@
         setTimeout(clickPlayButton,500);
     }
     const clickPlayButton = ()=>{
+        console.log("play button element count：")
+        console.log(document.querySelectorAll('.mvp-toggle-play').length);
         if(document.querySelectorAll('.mvp-toggle-play').length){
             base.emulateMouseEvent(document.querySelectorAll('.mvp-toggle-play')[0],'click');
         }else {
@@ -229,5 +232,15 @@
         }
     }
     main.init();
+    if (window.onurlchange === null) {
+        // feature is supported
+        window.addEventListener('urlchange', (info) => {
+            console.log('urlchanged');
+            const Reg=new RegExp('^'+courseLearningPath+'$')
+            if(Reg.test(location.pathname)&&/^#\/\d+$/.test(location.hash)){
+                setTimeout(clickPlayButton,500);
+            }
+        });
+    }
     // Your code here...
 })();
