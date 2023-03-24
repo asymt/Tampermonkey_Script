@@ -4,6 +4,9 @@
 // @version      0.1
 // @description  可以自动刷开放大学的视频课
 // @author       喻名堂
+// @supportURL        https://github.com/asymt/Tampermonkey_Script
+// @updateURL         https://raw.githubusercontent.com/asymt/Tampermonkey_Script/main/ouchn_course_auto_play.js
+// @downloadURL       https://raw.githubusercontent.com/asymt/Tampermonkey_Script/main/ouchn_course_auto_play.js
 // @match        *://lms.ouchn.cn/course/*
 // @connect           lms.ouchn.cn
 // @run-at            document-idle
